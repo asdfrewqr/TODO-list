@@ -13,16 +13,17 @@ const newTodoPriority = ref(4);
 const loading = ref(false);
 const statusFilter = ref('all');
 const categoryFilter = ref('All');
+const searchQuery = ref(''); // 新增：搜索关键词
 
 const API_URL = 'http://127.0.0.1:8000/todos';
 
-// 静态配置 (给属性名加上引号以兼容严格解析器)
+// 静态配置
 const categories = ['Work', 'Study', 'Life'];
 const priorities = [
-  { 'value': 1, 'label': 'P1: 重要且紧急', 'color': '#ff4d4f' },
-  { 'value': 2, 'label': 'P2: 重要不紧急', 'color': '#ffa940' },
-  { 'value': 3, 'label': 'P3: 紧急不重要', 'color': '#36cfc9' },
-  { 'value': 4, 'label': 'P4: 不重要不紧急', 'color': '#bfbfbf' }
+  { 'value': 1, 'label': 'Urgent & Important', 'color': '#FF3B30' },
+  { 'value': 2, 'label': 'Important', 'color': '#FF9500' },
+  { 'value': 3, 'label': 'Urgent', 'color': '#007AFF' },
+  { 'value': 4, 'label': 'Normal', 'color': '#8E8E93' }
 ];
 
 // --- 2. 核心逻辑 ---
@@ -55,7 +56,6 @@ const addTodo = function() {
   })
   .then(function(res) {
     todos.value.push(res.data);
-    // 重置表单
     newTodoTitle.value = '';
     newTodoContent.value = '';
     newTodoDeadline.value = '';
@@ -63,7 +63,7 @@ const addTodo = function() {
     newTodoPriority.value = 4;
   })
   .catch(function(err) {
-    alert('Add task failed');
+    alert('Failed to add task');
   });
 };
 
@@ -100,17 +100,17 @@ const deleteTodo = function(id) {
     .catch(function(err) { console.error(err); });
 };
 
-// --- 辅助函数 ---
 const getCountdown = function(deadlineStr) {
   if (!deadlineStr) return null;
   let clean = deadlineStr;
   if (clean.indexOf('Z') === -1 && clean.indexOf('+') === -1) clean += 'Z';
+
   const diff = new Date(clean) - new Date();
-  if (diff < 0) return { overdue: true, text: 'TIMEOUT' };
+  if (diff < 0) return { overdue: true, text: 'Overdue' };
 
   const d = Math.floor(diff / (86400000));
   const h = Math.floor((diff % 86400000) / 3600000);
-  return { overdue: false, text: d > 0 ? d + 'd ' + h + 'h left' : h + 'h left' };
+  return { overdue: false, text: d > 0 ? d + 'd ' + h + 'h' : h + 'h left' };
 };
 
 // --- 计算属性 ---
@@ -122,16 +122,27 @@ const totalCount = computed(function() { return todos.value.length; });
 const filteredTodos = computed(function() {
   let result = todos.value;
 
+  // 1. 搜索过滤 (新增)
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase();
+    result = result.filter(function(t) {
+      return t.title.toLowerCase().includes(query);
+    });
+  }
+
+  // 2. 状态筛选
   if (statusFilter.value === 'active') {
     result = result.filter(function(t) { return !t.is_completed; });
   } else if (statusFilter.value === 'completed') {
     result = result.filter(function(t) { return t.is_completed; });
   }
 
+  // 3. 分类筛选
   if (categoryFilter.value !== 'All') {
     result = result.filter(function(t) { return t.category === categoryFilter.value; });
   }
 
+  // 4. 排序
   return result.sort(function(a, b) {
     if (categoryFilter.value === 'All') {
       if (a.category !== b.category) return a.category.localeCompare(b.category);
@@ -143,25 +154,15 @@ const filteredTodos = computed(function() {
 // --- 交互特效 ---
 const handleCardMove = function(e) {
   const card = e.currentTarget;
-  const rect = card.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const rotateY = (x / rect.width - 0.5) * 5;
-  const rotateX = (y / rect.height - 0.5) * -5;
-  card.style.transform = 'perspective(1000px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) scale(1.01)';
-
-  if (card.classList.contains('card-overdue')) {
-    card.style.boxShadow = '0 0 25px rgba(255, 51, 51, 0.4)';
-  } else {
-    card.style.boxShadow = '0 0 20px rgba(0, 243, 255, 0.3)';
-  }
+  card.style.transform = 'translateY(-2px)';
+  card.style.boxShadow = '0 10px 25px rgba(0, 122, 255, 0.15)';
   card.style.zIndex = '10';
 };
 
 const handleCardLeave = function(e) {
   const card = e.currentTarget;
-  card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale(1)';
-  card.style.boxShadow = '0 4px 15px rgba(0, 100, 255, 0.1)';
+  card.style.transform = 'translateY(0)';
+  card.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)';
   card.style.zIndex = '1';
 };
 
@@ -172,50 +173,65 @@ onMounted(function() {
 
 <template>
   <div class="app-container">
-    <div class="bg-gradient"></div>
+    <!-- 动态背景 -->
+    <div class="aurora-bg"></div>
 
     <div class="layout-grid">
       <!-- 侧边栏 -->
       <aside class="sidebar">
+        <div class="window-controls">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+
         <div class="logo">
-          <i class="fab fa-react fa-2x spin"></i>
-          <span>BlueOS</span>
+          <div class="logo-icon"><i class="fas fa-check"></i></div>
+          <span>Reminders</span>
         </div>
 
         <nav class="nav-menu">
-          <div class="menu-label">STATUS LISTS</div>
-          <div class="nav-item" :class="{ active: statusFilter === 'all' }" @click="statusFilter = 'all'">
-            <i class="fas fa-layer-group"></i><span>Total List</span>
-          </div>
-          <div class="nav-item" :class="{ active: statusFilter === 'active' }" @click="statusFilter = 'active'">
-            <i class="fas fa-bolt"></i><span>Pending Tasks</span>
-          </div>
-          <div class="nav-item" :class="{ active: statusFilter === 'completed' }" @click="statusFilter = 'completed'">
-            <i class="fas fa-check-circle"></i><span>Completed</span>
+          <div class="nav-group">
+            <label>STATUS</label>
+            <div class="nav-item" :class="{ active: statusFilter === 'all' }" @click="statusFilter = 'all'">
+              <div class="icon-wrap gray"><i class="fas fa-inbox"></i></div>
+              <span>All</span>
+              <span class="count">{{ totalCount }}</span>
+            </div>
+            <div class="nav-item" :class="{ active: statusFilter === 'active' }" @click="statusFilter = 'active'">
+              <div class="icon-wrap orange"><i class="fas fa-calendar-day"></i></div>
+              <span>Scheduled</span>
+              <span class="count">{{ pendingCount }}</span>
+            </div>
+            <div class="nav-item" :class="{ active: statusFilter === 'completed' }" @click="statusFilter = 'completed'">
+              <div class="icon-wrap green"><i class="fas fa-check-circle"></i></div>
+              <span>Done</span>
+              <span class="count">{{ completedCount }}</span>
+            </div>
           </div>
 
-          <div class="menu-separator"></div>
-
-          <div class="menu-label">CATEGORY FILTER</div>
-          <div class="nav-item" :class="{ active: categoryFilter === 'All' }" @click="categoryFilter = 'All'">
-            <i class="fas fa-globe"></i><span>All Categories</span>
-          </div>
-          <div class="nav-item" :class="{ active: categoryFilter === 'Work' }" @click="categoryFilter = 'Work'">
-            <i class="fas fa-briefcase"></i><span>Work</span>
-          </div>
-          <div class="nav-item" :class="{ active: categoryFilter === 'Study' }" @click="categoryFilter = 'Study'">
-            <i class="fas fa-book"></i><span>Study</span>
-          </div>
-          <div class="nav-item" :class="{ active: categoryFilter === 'Life' }" @click="categoryFilter = 'Life'">
-            <i class="fas fa-coffee"></i><span>Life</span>
+          <div class="nav-group mt-4">
+            <label>LISTS</label>
+            <div class="nav-item" :class="{ active: categoryFilter === 'All' }" @click="categoryFilter = 'All'">
+              <i class="fas fa-layer-group nav-icon"></i><span>All Lists</span>
+            </div>
+            <div class="nav-item" :class="{ active: categoryFilter === 'Work' }" @click="categoryFilter = 'Work'">
+              <i class="fas fa-briefcase nav-icon" style="color: #007AFF"></i><span>Work</span>
+            </div>
+            <div class="nav-item" :class="{ active: categoryFilter === 'Study' }" @click="categoryFilter = 'Study'">
+              <i class="fas fa-book nav-icon" style="color: #FF9500"></i><span>Study</span>
+            </div>
+            <div class="nav-item" :class="{ active: categoryFilter === 'Life' }" @click="categoryFilter = 'Life'">
+              <i class="fas fa-home nav-icon" style="color: #30D158"></i><span>Life</span>
+            </div>
           </div>
         </nav>
 
-        <div class="user-profile">
-          <div class="avatar"></div>
+        <div class="user-card">
+          <div class="avatar">AM</div>
           <div class="user-details">
-            <span class="name">Admin</span>
-            <span class="role">System Level</span>
+            <span class="name">Alex Morgan</span>
+            <span class="role">iCloud</span>
           </div>
         </div>
       </aside>
@@ -223,125 +239,136 @@ onMounted(function() {
       <!-- 主内容区 -->
       <main class="main-content">
         <header class="top-bar">
-          <h1>Task Dashboard</h1>
-          <div class="system-status"><span class="status-dot"></span> ONLINE</div>
+          <div class="title-area">
+            <h1>Tasks</h1>
+            <p class="date-today">{{ new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) }}</p>
+          </div>
+          <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <!-- 启用搜索输入框并绑定模型 -->
+            <input v-model="searchQuery" placeholder="Search tasks...">
+          </div>
         </header>
 
-        <!-- 统计卡片 -->
+        <!-- 统计概览 -->
         <div class="stats-row">
-          <div class="stat-card blue" @mousemove="handleCardMove" @mouseleave="handleCardLeave">
-            <div class="icon-box"><i class="fas fa-tasks"></i></div>
-            <div class="stat-info"><h3>{{ totalCount }}</h3><p>Total</p></div>
+          <div class="stat-card" @mousemove="handleCardMove" @mouseleave="handleCardLeave">
+            <div class="stat-icon blue"><i class="fas fa-inbox"></i></div>
+            <div class="stat-number">{{ totalCount }}</div>
+            <div class="stat-label">Total</div>
           </div>
-          <div class="stat-card cyan" @mousemove="handleCardMove" @mouseleave="handleCardLeave">
-            <div class="icon-box"><i class="fas fa-clock"></i></div>
-            <div class="stat-info"><h3>{{ pendingCount }}</h3><p>Pending</p></div>
+          <div class="stat-card orange" @mousemove="handleCardMove" @mouseleave="handleCardLeave">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-number">{{ pendingCount }}</div>
+            <div class="stat-label">Pending</div>
           </div>
-          <div class="stat-card indigo" @mousemove="handleCardMove" @mouseleave="handleCardLeave">
-            <div class="icon-box"><i class="fas fa-check"></i></div>
-            <div class="stat-info"><h3>{{ completedCount }}</h3><p>Completed</p></div>
+          <div class="stat-card green" @mousemove="handleCardMove" @mouseleave="handleCardLeave">
+            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-number">{{ completedCount }}</div>
+            <div class="stat-label">Completed</div>
           </div>
         </div>
 
-        <!-- 输入模块 (纵向) -->
-        <div class="input-module glass-panel">
-          <div class="module-title"><i class="fas fa-plus-circle"></i> Create New Task</div>
-          <div class="input-stack">
-            <input v-model="newTodoTitle" placeholder="Task Title..." class="glass-input" @keyup.enter="addTodo">
-            <input v-model="newTodoContent" placeholder="Description..." class="glass-input" @keyup.enter="addTodo">
+        <!-- 添加任务 -->
+        <div class="input-module apple-panel">
+          <div class="module-header">New Reminder</div>
 
-            <!-- 设置行：时间、分类、优先级 -->
-            <div class="settings-row">
-              <div class="input-group">
-                <label>Deadline</label>
-                <input type="datetime-local" v-model="newTodoDeadline" class="glass-input date-picker">
+          <div class="input-form">
+            <div class="form-group">
+              <input v-model="newTodoTitle" placeholder="Title" class="apple-input title-input" @keyup.enter="addTodo">
+            </div>
+
+            <div class="form-group">
+              <input v-model="newTodoContent" placeholder="Notes" class="apple-input" @keyup.enter="addTodo">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col">
+                <label>Date</label>
+                <input type="datetime-local" v-model="newTodoDeadline" class="apple-input date-picker">
               </div>
-              <div class="input-group">
-                <label>Category</label>
-                <select v-model="newTodoCategory" class="glass-input select-input">
+              <div class="form-group col">
+                <label>List</label>
+                <select v-model="newTodoCategory" class="apple-input apple-select">
                   <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
                 </select>
               </div>
-              <div class="input-group">
-                <label>Priority (Eisenhower)</label>
-                <select v-model="newTodoPriority" class="glass-input select-input">
+              <div class="form-group col">
+                <label>Priority</label>
+                <select v-model="newTodoPriority" class="apple-input apple-select">
                   <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
                 </select>
               </div>
+              <div class="form-group btn-container">
+                <button class="apple-btn" @click="addTodo">Add</button>
+              </div>
             </div>
-
-            <button class="action-btn" @click="addTodo">Create Task <i class="fas fa-arrow-right"></i></button>
           </div>
         </div>
 
         <!-- 任务列表 -->
         <div class="todo-list">
-          <div v-if="loading" class="state-text">Loading data...</div>
-          <div v-else-if="filteredTodos.length === 0" class="state-text">No tasks found in current view.</div>
+          <div v-if="loading" class="state-text">Syncing...</div>
+          <div v-else-if="filteredTodos.length === 0" class="state-text">
+            <span v-if="searchQuery">No tasks match "{{ searchQuery }}"</span>
+            <span v-else>No reminders found.</span>
+          </div>
 
           <div
             v-for="todo in filteredTodos"
             :key="todo.id"
-            class="todo-item glass-panel"
-            :class="{
-              'is-done': todo.is_completed,
-              'card-overdue': !todo.is_completed && getCountdown(todo.deadline)?.overdue
-            }"
+            class="todo-item apple-panel"
+            :class="{ 'is-done': todo.is_completed }"
             @mousemove="handleCardMove"
             @mouseleave="handleCardLeave"
           >
-            <!-- 卡片头部: ID和删除 -->
-            <div class="item-header">
-              <span class="id-tag">#{{ todo.id }}</span>
-              <button class="del-btn" @click.stop="deleteTodo(todo.id)"><i class="fas fa-times"></i></button>
-            </div>
+            <div class="item-left">
+              <div class="checkbox-circle" :class="{ checked: todo.is_completed }" @click="toggleTodo(todo)">
+                <i class="fas fa-check" v-if="todo.is_completed"></i>
+              </div>
 
-            <!-- 卡片主体: 标题和描述 -->
-            <div class="item-body" @click="toggleTodo(todo)">
-              <h4>{{ todo.title }}</h4>
-              <p>{{ todo.description || 'No description' }}</p>
-            </div>
-
-            <!-- 卡片底部: 属性设置与状态 -->
-            <div class="item-footer">
-              <div class="meta-controls">
-                <!-- 分类标签 (可点击修改) -->
-                <div class="meta-group">
-                  <i class="fas fa-tag"></i>
-                  <select
-                    class="mini-select"
-                    :value="todo.category"
-                    @change="(e) => updateTask(todo, 'category', e.target.value)"
-                    @click.stop
-                  >
-                    <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-                  </select>
+              <div class="item-content">
+                <div class="item-header-row">
+                  <h4>{{ todo.title }}</h4>
+                  <!-- 优先级标签 -->
+                  <span
+                    class="priority-dot"
+                    :style="{ backgroundColor: priorities.find(function(p) { return p.value === todo.priority })?.color }"
+                    title="Priority"
+                  ></span>
                 </div>
 
-                <!-- 优先级标签 (可点击修改) -->
-                <div class="meta-group" :style="{ color: priorities.find(p => p.value === todo.priority)?.color }">
-                  <i class="fas fa-flag"></i>
+                <p v-if="todo.description">{{ todo.description }}</p>
+
+                <div class="item-meta">
+                  <!-- 截止日期标签 -->
+                  <span v-if="todo.deadline && !todo.is_completed" class="meta-tag deadline" :class="{ 'overdue': getCountdown(todo.deadline).overdue }">
+                    <i class="far fa-clock"></i> {{ getCountdown(todo.deadline).text }}
+                  </span>
+
+                  <!-- 分类标签 -->
+                  <span class="meta-tag category">
+                    {{ todo.category }}
+                  </span>
+
+                  <!-- 可修改优先级的下拉 (隐式) -->
                   <select
-                    class="mini-select priority-select"
+                    class="mini-select"
                     :value="todo.priority"
                     @change="(e) => updateTask(todo, 'priority', parseInt(e.target.value))"
                     @click.stop
+                    title="Change Priority"
                   >
                     <option v-for="p in priorities" :key="p.value" :value="p.value">P{{ p.value }}</option>
                   </select>
                 </div>
               </div>
+            </div>
 
-              <div class="status-group">
-                <div v-if="todo.deadline && !todo.is_completed"
-                     class="time-badge"
-                     :class="{ 'warn': getCountdown(todo.deadline).overdue }">
-                  <i class="far fa-clock"></i> {{ getCountdown(todo.deadline).text }}
-                </div>
-                <div class="status-badge" :class="todo.is_completed ? 'done' : 'active'">
-                  {{ todo.is_completed ? 'DONE' : 'ACTIVE' }}
-                </div>
-              </div>
+            <div class="item-right">
+              <button class="icon-btn delete" @click.stop="deleteTodo(todo.id)">
+                <i class="far fa-trash-alt"></i>
+              </button>
             </div>
           </div>
         </div>
@@ -351,177 +378,244 @@ onMounted(function() {
 </template>
 
 <style>
+/* 全局设置 */
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
 </style>
 
 <style scoped>
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css");
 
 :root {
-  --primary: #00f2ff;
-  --secondary: #0066ff;
-  --glass-bg: rgba(255, 255, 255, 0.1);
-  --panel-bg: rgba(10, 20, 40, 0.7);
+  /* Apple System Colors */
+  --apple-blue: #007AFF;
+  --apple-red: #FF453A;
+  --apple-green: #30D158;
+  --apple-orange: #FF9F0A;
+  --apple-gray: #8E8E93;
+  --apple-bg-glass: rgba(255, 255, 255, 0.65);
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --border-light: rgba(0, 0, 0, 0.05);
 }
 
 .app-container {
   width: 100%; height: 100%;
-  background-color: #050a14; color: white;
   position: fixed; top: 0; left: 0;
+  background: #F2F6FF; /* 极淡的蓝灰色底 */
 }
 
-.bg-gradient {
-  position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-  background: radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.15), transparent 60%),
-              radial-gradient(circle at 80% 20%, rgba(0, 242, 255, 0.1), transparent 40%);
-  z-index: 0; animation: rotate 60s linear infinite;
+/* 极光背景 (淡蓝紫色系，清爽风格) */
+.aurora-bg {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background:
+    radial-gradient(circle at 10% 10%, #D0E8FF 0%, transparent 50%),
+    radial-gradient(circle at 90% 90%, #E8E0FF 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, #FFFFFF 0%, transparent 80%);
+  z-index: 0;
+  filter: blur(60px);
 }
-@keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .layout-grid {
-  position: relative; z-index: 1; display: flex; width: 100%; height: 100%;
+  position: relative; z-index: 2;
+  display: flex; width: 100%; height: 100%;
 }
 
-/* 侧边栏 */
+/* --- 侧边栏 (macOS Sidebar) --- */
 .sidebar {
   width: 260px; height: 100%;
-  background: rgba(10, 25, 50, 0.85); backdrop-filter: blur(20px);
-  border-right: 1px solid rgba(100, 200, 255, 0.1);
+  background: rgba(255, 255, 255, 0.5); /* 高透亮白 */
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+  border-right: 1px solid rgba(0,0,0,0.05);
   display: flex; flex-direction: column; padding: 20px; flex-shrink: 0;
 }
 
+.window-controls { display: flex; gap: 8px; margin-bottom: 20px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; }
+.red { background: #FF5F56; }
+.yellow { background: #FFBD2E; }
+.green { background: #27C93F; }
+
 .logo {
   display: flex; align-items: center; gap: 10px;
-  font-size: 24px; font-weight: bold; color: #00f2ff; margin-bottom: 30px; padding-left: 10px;
+  font-size: 18px; font-weight: 600; color: #333; margin-bottom: 30px;
+  opacity: 0.9;
 }
-.spin { animation: spin 10s linear infinite; }
-@keyframes spin { 100% { transform: rotate(360deg); } }
+.logo-icon { width: 28px; height: 28px; background: var(--apple-blue); color: white; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
 
-.nav-menu { display: flex; flex-direction: column; gap: 5px; flex: 1; }
-.menu-label { font-size: 11px; color: #506080; font-weight: bold; margin-top: 20px; margin-bottom: 5px; letter-spacing: 1px; }
-.menu-separator { height: 1px; background: rgba(255,255,255,0.1); margin: 10px 0; }
+.nav-menu { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+.nav-group label {
+  display: block; font-size: 11px; font-weight: 600; color: var(--apple-gray);
+  margin-bottom: 5px; padding-left: 10px;
+}
+.mt-4 { margin-top: 20px; }
 
 .nav-item {
-  display: flex; align-items: center; gap: 12px; padding: 10px 15px;
-  border-radius: 8px; cursor: pointer; transition: all 0.3s; color: #a0b0c0; font-weight: 500;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; margin-bottom: 2px;
+  border-radius: 6px; cursor: pointer;
+  transition: background 0.15s;
+  color: #444; font-size: 14px; font-weight: 500;
 }
-.nav-item:hover { background: rgba(0, 242, 255, 0.1); color: white; }
-.nav-item.active { background: linear-gradient(90deg, rgba(0, 102, 255, 0.2), transparent); border-left: 3px solid #00f2ff; color: #00f2ff; }
+.nav-item:hover { background: rgba(0,0,0,0.05); }
+.nav-item.active { background: rgba(0,0,0,0.08); color: #000; }
+
+.icon-wrap {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: white;
+}
+.nav-icon { width: 24px; text-align: center; font-size: 16px; color: var(--apple-gray); }
+.icon-wrap.gray { background: var(--apple-gray); }
+.icon-wrap.orange { background: var(--apple-orange); }
+.icon-wrap.green { background: var(--apple-green); }
+
+.count { margin-left: auto; color: var(--apple-gray); font-size: 13px; }
 
 .user-profile {
-  margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 15px;
-  background: rgba(255, 255, 255, 0.05); border-radius: 12px;
+  margin-top: auto; display: flex; align-items: center; gap: 10px;
+  padding: 10px; border-top: 1px solid var(--border-light);
 }
-.avatar { width: 36px; height: 36px; background: #0066ff; border-radius: 50%; }
+.avatar {
+  width: 32px; height: 32px; background: var(--apple-gray); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: white;
+}
 .user-details { display: flex; flex-direction: column; }
-.name { font-size: 14px; font-weight: bold; }
-.role { font-size: 12px; color: #00f2ff; }
+.name { font-size: 13px; font-weight: 500; }
+.role { font-size: 11px; color: var(--apple-gray); }
 
-/* 主内容区 */
+/* --- 主内容区 --- */
 .main-content {
-  flex: 1; padding: 30px 40px; overflow-y: auto;
+  flex: 1; padding: 40px 50px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 25px;
 }
 
-.top-bar { display: flex; justify-content: space-between; align-items: center; }
-h1 { font-size: 28px; font-weight: 600; color: #e0f0ff; }
-.system-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #00f2ff; font-weight: bold; }
-.status-dot { width: 8px; height: 8px; background: #00f2ff; border-radius: 50%; box-shadow: 0 0 10px #00f2ff; }
+.top-bar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end; }
+.top-bar h1 { font-size: 32px; font-weight: 700; color: var(--apple-blue); margin-bottom: 2px; }
+.date-today { font-size: 18px; color: var(--apple-red); font-weight: 500; }
 
-.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.search-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0,0,0,0.05);
+  padding: 6px 10px; border-radius: 8px; width: 200px;
+}
+.search-bar i { color: var(--apple-gray); font-size: 13px; }
+.search-bar input {
+  background: transparent; border: none; color: #333; font-size: 13px; width: 100%; outline: none;
+}
+
+/* 统计卡片 */
+.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 10px; }
 .stat-card {
-  padding: 20px; border-radius: 16px; display: flex; align-items: center; gap: 20px;
-  background: rgba(20, 40, 70, 0.6); border: 1px solid rgba(100, 200, 255, 0.2);
-  backdrop-filter: blur(10px); transition: transform 0.2s;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px; padding: 15px;
+  display: flex; flex-direction: column;
+  border: 1px solid white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  backdrop-filter: blur(20px); transition: all 0.2s;
+  height: 100px; justify-content: space-between;
 }
-.icon-box {
-  width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
-  font-size: 20px; background: rgba(255, 255, 255, 0.1);
+.stat-icon { font-size: 18px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+.stat-card.blue .stat-icon { background: var(--apple-blue); }
+.stat-card.orange .stat-icon { background: var(--apple-orange); }
+.stat-card.green .stat-icon { background: var(--apple-green); }
+.stat-number { font-size: 28px; font-weight: 700; color: #333; margin-left: auto; margin-top: -30px; }
+.stat-label { font-size: 13px; color: var(--apple-gray); font-weight: 600; }
+
+/* 输入模块 */
+.apple-panel {
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  border: 1px solid white;
+  backdrop-filter: blur(20px);
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
-.blue .icon-box { color: #00f2ff; box-shadow: 0 0 15px rgba(0, 242, 255, 0.2); }
-.cyan .icon-box { color: #00aaff; box-shadow: 0 0 15px rgba(0, 170, 255, 0.2); }
-.indigo .icon-box { color: #6699ff; box-shadow: 0 0 15px rgba(102, 153, 255, 0.2); }
-.stat-info h3 { font-size: 24px; font-weight: bold; }
-.stat-info p { font-size: 13px; color: #a0c0ff; }
 
-.glass-panel {
-  background: rgba(20, 30, 50, 0.7); border: 1px solid rgba(100, 200, 255, 0.2);
-  backdrop-filter: blur(10px); border-radius: 16px;
+.input-module { display: flex; flex-direction: column; gap: 15px; }
+.module-header { font-size: 15px; font-weight: 600; color: #333; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 10px; margin-bottom: 5px; }
+
+.form-group { margin-bottom: 12px; }
+.form-row { display: flex; gap: 12px; align-items: flex-end; }
+.col { flex: 1; }
+.btn-container { width: 100px; }
+label { display: block; font-size: 11px; color: var(--apple-gray); margin-bottom: 4px; font-weight: 600; }
+
+.apple-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #333; font-size: 14px;
+  outline: none; transition: border 0.2s;
 }
+.apple-input:focus { border-color: var(--apple-blue); background: white; box-shadow: 0 0 0 3px rgba(10,132,255,0.1); }
+.title-input { font-weight: 600; font-size: 15px; }
+.apple-select { appearance: none; cursor: pointer; }
 
-.input-module { padding: 25px; }
-.module-title { color: #00f2ff; font-weight: bold; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
-.input-stack { display: flex; flex-direction: column; gap: 15px; }
-.settings-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
-.input-group { display: flex; flex-direction: column; gap: 6px; }
-.input-group label { font-size: 12px; color: #80a0c0; font-weight: 600; }
-
-.glass-input {
-  background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px; padding: 12px 15px; color: white; font-family: inherit;
-  outline: none; transition: all 0.3s;
+.apple-btn {
+  width: 100%; height: 38px;
+  background: var(--apple-blue); color: white;
+  border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.2s;
 }
-.glass-input:focus { border-color: #00f2ff; background: rgba(0, 0, 0, 0.5); box-shadow: 0 0 10px rgba(0, 242, 255, 0.1); }
-.select-input { appearance: none; cursor: pointer; }
-.date-picker { color: #fff; color-scheme: dark; }
+.apple-btn:hover { background: #0062cc; }
+.apple-btn:active { transform: scale(0.96); }
 
-.action-btn {
-  margin-top: 10px; background: linear-gradient(135deg, #0066ff, #00ccff);
-  border: none; padding: 14px; border-radius: 8px; color: white; font-weight: bold;
-  cursor: pointer; display: flex; justify-content: center; gap: 10px; transition: all 0.2s;
-}
-.action-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0, 102, 255, 0.4); }
-
-.todo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; padding-bottom: 40px; }
-.state-text { text-align: center; color: #607080; grid-column: 1/-1; padding: 20px; }
+/* 任务列表 */
+.todo-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 40px; }
+.state-text { text-align: center; color: var(--apple-gray); padding: 20px; }
 
 .todo-item {
-  padding: 20px; display: flex; flex-direction: column; justify-content: space-between;
-  min-height: 180px; cursor: pointer; transition: transform 0.2s; border-left: 4px solid transparent;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px; transition: all 0.2s; cursor: default;
 }
-/* 卡片左侧边框对应分类颜色 */
-.todo-item:has(.mini-select[value="Work"]) { border-left-color: #00f2ff; }
-.todo-item:has(.mini-select[value="Study"]) { border-left-color: #ffa940; }
-.todo-item:has(.mini-select[value="Life"]) { border-left-color: #36cfc9; }
+.is-done { opacity: 0.5; }
+.is-done h4 { text-decoration: line-through; color: var(--apple-gray); }
 
-.card-overdue { border-color: #ff4d4f; box-shadow: 0 0 15px rgba(255, 77, 79, 0.2); }
-
-.item-header { display: flex; justify-content: space-between; margin-bottom: 10px; color: #506080; font-size: 12px; }
-.del-btn { background: none; border: none; color: #ff4444; cursor: pointer; padding: 5px; opacity: 0.6; transition: opacity 0.2s; }
-.del-btn:hover { opacity: 1; }
-
-.item-body h4 { font-size: 18px; margin-bottom: 6px; font-weight: 600; }
-.item-body p { font-size: 14px; color: #b0c0d0; line-height: 1.4; }
-
-.item-footer {
-  margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex; justify-content: space-between; align-items: center;
+.item-left { display: flex; align-items: flex-start; gap: 15px; flex: 1; }
+.checkbox-circle {
+  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid #c7c7cc;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  flex-shrink: 0; margin-top: 2px;
 }
+.checkbox-circle.checked { background: var(--apple-blue); border-color: var(--apple-blue); color: white; font-size: 12px; }
 
-.meta-controls { display: flex; gap: 10px; }
-.meta-group { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #8090a0; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 6px; }
-.mini-select { background: transparent; border: none; color: inherit; font-size: 12px; cursor: pointer; outline: none; }
-.priority-select { font-weight: bold; }
+.item-content { flex: 1; }
+.item-header-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 
-.status-group { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.status-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-.status-badge.active { background: rgba(0, 242, 255, 0.15); color: #00f2ff; }
-.status-badge.done { background: rgba(0, 255, 100, 0.15); color: #00ff66; }
+.item-content h4 { font-size: 15px; font-weight: 500; margin: 0; }
+.item-content p { font-size: 13px; color: var(--apple-gray); line-height: 1.4; margin-bottom: 4px; }
 
-.time-badge { font-size: 11px; color: #a0c0ff; display: flex; align-items: center; gap: 4px; }
-.time-badge.warn { color: #ff4d4f; font-weight: bold; animation: pulse 1s infinite; }
-@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+.item-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.meta-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+.deadline-tag { color: var(--apple-blue); background: rgba(10, 132, 255, 0.1); }
+.deadline-tag.overdue { color: var(--apple-red); background: rgba(255, 69, 58, 0.1); }
+.category { color: #8E8E93; background: rgba(0,0,0,0.05); }
 
-.is-done { opacity: 0.6; border-color: #00ff66; }
-.is-done h4 { text-decoration: line-through; }
+.mini-select { border: none; background: transparent; font-size: 10px; color: #888; cursor: pointer; }
+
+.icon-btn {
+  background: transparent; border: none; color: #c7c7cc;
+  width: 30px; height: 30px; border-radius: 50%;
+  cursor: pointer; transition: color 0.2s;
+}
+.icon-btn:hover { color: var(--apple-red); background: rgba(255, 69, 58, 0.1); }
 
 @media (max-width: 768px) {
   .layout-grid { flex-direction: column; overflow-y: auto; }
   .sidebar { width: 100%; height: auto; padding: 15px; flex-direction: row; align-items: center; justify-content: space-between; }
-  .nav-menu { display: none; } /* Mobile simplify */
-  .user-profile { display: none; }
+  .window-controls, .nav-menu, .user-profile { display: none; }
   .main-content { padding: 20px; }
-  .settings-row { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: 1fr; }
+  .form-row { flex-direction: column; gap: 10px; }
+  .btn-container { width: 100%; }
 }
 </style>
