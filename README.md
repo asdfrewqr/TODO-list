@@ -28,6 +28,7 @@ Todo-List 任务管理系统
 
   元气值系统：完成任务积攒“元气值”，解锁专属互动动画，让效率管理更具成就感。
   <img width="1241" height="659" alt="image" src="https://github.com/user-attachments/assets/a4c4c288-0ed0-46b7-abf1-79d01d62d3cd" />
+  <img width="418" height="308" alt="image" src="https://github.com/user-attachments/assets/63d77174-c1ac-4983-828e-ce3da8ae7732" />
 
 
 🛠 技术栈
