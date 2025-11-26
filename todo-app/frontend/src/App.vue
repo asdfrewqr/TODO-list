@@ -526,7 +526,7 @@ label { display: block; font-size: 11px; color: var(--apple-gray); margin-bottom
 .apple-input:focus { border-color: var(--apple-blue); background: white; box-shadow: 0 0 0 3px rgba(10,132,255,0.1); }
 .title-input { font-weight: 600; font-size: 15px; }
 .apple-select { appearance: none; cursor: pointer; }
-.apple-btn { width: 100%; height: 38px; background: var(--apple-blue); color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+.apple-btn { width: 100%; height: 38px; background: var(--apple-blue); color: cornflowerblue; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
 .apple-btn:hover { background: #0062cc; }
 
 .todo-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 40px; }
